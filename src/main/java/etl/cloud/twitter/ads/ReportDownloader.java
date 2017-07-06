@@ -2,7 +2,6 @@ package etl.cloud.twitter.ads;
 
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
-import com.sun.deploy.util.StringUtils;
 import twitter4j.*;
 import twitter4j.api.TwitterAdsCampaignApi;
 import twitter4j.api.TwitterAdsStatApi;
@@ -99,6 +98,7 @@ public class ReportDownloader {
     }
 
     private static final int MAX_ENTITY_IDS_PER_QUERY = 20;
+    private static final int ASYNC_JOB_STATUS_CHECK_SLEEP_TIME_SEC = 1;
 
     private String accountId;
     private int asyncJobExecutionTimeout;
@@ -170,13 +170,14 @@ public class ReportDownloader {
 
     private List<String> fetchDataURLs(List<String> jobIds) throws TwitterException {
         List<String> dataURLs = new ArrayList<>();
-        long timeoutMillis = TimeUnit.SECONDS.toMillis(asyncJobExecutionTimeout);
+        long timeout   = TimeUnit.SECONDS.toMillis(asyncJobExecutionTimeout);
+        long sleepTime = TimeUnit.SECONDS.toMillis(ASYNC_JOB_STATUS_CHECK_SLEEP_TIME_SEC);
 
         boolean jobFinished;
         BaseAdsListResponseIterable<JobDetails> jobExecutionDetails;
         for (String jobId : jobIds) {
             jobFinished = false;
-            long deadline = System.currentTimeMillis() + timeoutMillis;
+            long deadline = System.currentTimeMillis() + timeout;
             do {
                 jobExecutionDetails = statApi.getJobExecutionDetails(accountId, Lists.newArrayList(jobId));
                 for (BaseAdsListResponse<JobDetails> base : jobExecutionDetails) {
@@ -184,7 +185,7 @@ public class ReportDownloader {
                         jobFinished = (jd != null) && (jd.getStatus() == TwitterAsyncQueryStatus.SUCCESS);
                     }
                 }
-                TwitterAdUtil.reallySleep(timeoutMillis / 10);
+                TwitterAdUtil.reallySleep(sleepTime);
             } while (!jobFinished && System.currentTimeMillis() <= deadline);
 
             if (!jobFinished) {
@@ -230,7 +231,7 @@ public class ReportDownloader {
 
         List<HttpParameter> params = new ArrayList<>();
         params.add(new HttpParameter("entity", entity));
-        params.add(new HttpParameter("entity_ids", StringUtils.join(entityIds, ",")));
+        params.add(new HttpParameter("entity_ids", String.join(",", entityIds)));
         params.add(new HttpParameter("start_time", startTime));
         params.add(new HttpParameter("end_time", endTime));
         params.add(new HttpParameter("with_deleted", withDeleted));
